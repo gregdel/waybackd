@@ -1,0 +1,24 @@
+# Provider to find your current IP
+provider: http://ifconfig.ovh
+# For domain and subdomain for my.superdomain.fr.
+domain: superdomain.fr
+sub_domain: my
+# DNS provider to run the DNS lookup. Protocol is assumed to be UDP and port is
+# assumed to be 53.
+dns_provider: 1.1.1.1
+# Check interval is the frequency used to check the current IP vs the DNS
+# domain.  It does not make much sense to use a value less than the DNS TTL.
+# For this reason, if the check interval is less than the configured TTL, the
+# TTL will be used instead.
+check_interval: 30s
+# Server address defines the address and port used by the server.
+server_address: 0.0.0.0:8080
+# Time To Live of the DNS entry the time after which it will expire. You should
+# keep this value pretty low for faster DNS updates.
+ttl: 60
+# OVH API configuration
+ovh:
+  application_key: 6276b617be4afa4e
+  application_secret: 8681b1253ce738ab09a2a06014c11f9a
+  consumer_key: 5d371e153f232c90dc0e783de2ba2f63
+  endpoint: ovh-eu
