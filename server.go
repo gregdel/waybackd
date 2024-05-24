@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 )
 
 func (a *app) serverMode(ctx context.Context) error {
@@ -35,11 +36,13 @@ func (a *app) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		from := req.Header.Get(h)
 		if from != "" {
 			rw.WriteHeader(http.StatusOK)
-			rw.Write([]byte(from))
+			_, err := rw.Write([]byte(from))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to write response: %s\n", err)
+			}
 			return
 		}
 	}
 
 	rw.WriteHeader(http.StatusNotFound)
-	return
 }

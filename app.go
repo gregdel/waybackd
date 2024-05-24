@@ -147,7 +147,7 @@ func (a *app) daemonMode(ctx context.Context) error {
 		case <-ticker.C:
 			err = a.updateDomainIfNeeded(ctx)
 			if err != nil {
-				return err
+				fmt.Fprintf(os.Stderr, "failed to update domain: %s\n", err)
 			}
 		}
 	}

@@ -104,5 +104,6 @@ func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
 		}
 	}
 
-	return record, a.refreshZoneRecord()
+	err = a.refreshZoneRecord()
+	return record, err
 }
