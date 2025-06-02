@@ -63,45 +63,44 @@ func newApp() (*app, error) {
 		return nil, err
 	}
 
-	config := &config{}
-	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
-		return nil, err
-	}
-
-	// Ensure the check interval is greater or equal to the TTL
-	if config.CheckInterval.Seconds() < float64(config.TTL) {
-		config.CheckInterval = time.Duration(config.TTL) * time.Second
-		fmt.Printf("Using the TTL as the check interval: %s\n", config.CheckInterval)
-	}
-
-	client, err := ovh.NewClient(
-		config.OVH.Endpoint, config.OVH.ApplicationKey,
-		config.OVH.ApplicationSecret, config.OVH.ConsumerKey)
-	if err != nil {
-		return nil, err
-	}
-
 	app := &app{
-		config: config,
-		client: client,
+		config: &config{},
 	}
 
-	app.resolver = app.newResolver()
-	app.httpClient = http.DefaultClient
-
-	if daemon {
-		app.mode = appModeDaemon
+	if err := yaml.NewDecoder(file).Decode(app.config); err != nil {
+		return nil, fmt.Errorf("Failed to decode config file: %w", err)
 	}
 
 	if server {
+		if app.config.ServerAddress == "" {
+			return nil, fmt.Errorf("Missing server address")
+		}
+	} else {
+		app.resolver = app.newResolver()
+		app.httpClient = http.DefaultClient
+
+		// Ensure the check interval is greater or equal to the TTL
+		if app.config.CheckInterval.Seconds() < float64(app.config.TTL) {
+			app.config.CheckInterval = time.Duration(app.config.TTL) * time.Second
+			fmt.Printf("Using the TTL as the check interval: %s\n", app.config.CheckInterval)
+		}
+
+		app.client, err = ovh.NewClient(
+			app.config.OVH.Endpoint, app.config.OVH.ApplicationKey,
+			app.config.OVH.ApplicationSecret, app.config.OVH.ConsumerKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	switch {
+	case daemon:
+		app.mode = appModeDaemon
+	case server:
 		app.mode = appModeServer
-	}
-
-	if clean {
+	case clean:
 		app.mode = appModeClean
-	}
-
-	if app.mode == appModeUnconfigured {
+	default:
 		return app, fmt.Errorf("Please select a mode")
 	}
 
