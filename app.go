@@ -135,21 +135,24 @@ func (a *app) daemonMode(ctx context.Context) error {
 	ticker := time.NewTicker(a.config.CheckInterval)
 	defer ticker.Stop()
 
-	err := a.updateDomainIfNeeded(ctx)
-	if err != nil {
-		return err
-	}
+	fmt.Println("Starting deamon mode")
+
+	a.tryUpdateDomainIfNeeded(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			err = a.updateDomainIfNeeded(ctx)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to update domain: %s\n", err)
-			}
+			a.tryUpdateDomainIfNeeded(ctx)
 		}
+	}
+}
+
+func (a *app) tryUpdateDomainIfNeeded(ctx context.Context) {
+	err := a.updateDomainIfNeeded(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to update domain: %s\n", err)
 	}
 }
 
@@ -165,7 +168,7 @@ func (a *app) updateDomainIfNeeded(ctx context.Context) error {
 	}
 
 	if ip == dnsIP {
-		fmt.Println("All good")
+		// All good
 		return nil
 	}
 
