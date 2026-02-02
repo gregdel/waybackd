@@ -9,8 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ovh/go-ovh/ovh"
 	"gopkg.in/yaml.v3"
+
+	"github.com/ovh/go-ovh/ovh"
 )
 
 type config struct {
@@ -30,7 +31,7 @@ type config struct {
 
 type app struct {
 	config      config
-	client      *ovh.Client
+	client      OVHClient
 	dnsProvider DNSProvider
 	ipProvider  IPProvider
 }
