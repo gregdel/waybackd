@@ -13,41 +13,18 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.24.3'
+        go-version: '1.25.6'
 
     - name: Build binary
       run: ./build.sh
 
-    - name: Generate release tag
-      id: tag
+    - name: Create release
       run: |
         TAG="v$(TZ='Europe/Paris' date +'%Y%m%d-%H%M%S')-$(git rev-parse --short HEAD)"
-        echo "tag=$TAG" >> $GITHUB_OUTPUT
-        echo "Generated tag: $TAG"
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+        gh release create "$TAG" ./waybackd \
+          --title "Release $TAG" \
+          --notes "Automated release for commit ${{ github.sha }}"
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag.outputs.tag }}
-        release_name: Release ${{ steps.tag.outputs.tag }}
-        body: |
-          Automated release for commit ${{ github.sha }}
-
-          Built from latest master branch.
-        draft: false
-        prerelease: false
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./waybackd
-        asset_name: waybackd
-        asset_content_type: application/octet-stream
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
