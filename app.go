@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,13 +15,21 @@ import (
 	"github.com/ovh/go-ovh/ovh"
 )
 
+type domain struct {
+	Domain    string        `yaml:"domain"`
+	SubDomain string        `yaml:"sub_domain"`
+	TTL       time.Duration `yaml:"ttl"`
+}
+
+func (d domain) hostname() string {
+	return d.SubDomain + "." + d.Domain
+}
+
 type config struct {
 	Provider      string        `yaml:"provider"`
-	Domain        string        `yaml:"domain"`
-	SubDomain     string        `yaml:"sub_domain"`
-	TTL           uint          `yaml:"ttl"`
 	DNSProvider   string        `yaml:"dns_provider"`
 	CheckInterval time.Duration `yaml:"check_interval"`
+	Domains       []domain      `yaml:"domains"`
 	OVH           struct {
 		ApplicationKey    string `yaml:"application_key"`
 		ApplicationSecret string `yaml:"application_secret"`
@@ -52,13 +61,23 @@ func newApp() (*app, error) {
 		return nil, fmt.Errorf("Failed to decode config file: %w", err)
 	}
 
+	if len(app.config.Domains) == 0 {
+		return nil, fmt.Errorf("no domains configured")
+	}
+
 	app.dnsProvider = newDNSProvider(app.config.DNSProvider + ":53")
 	app.ipProvider = newIpProvider()
 
-	// Ensure the check interval is greater or equal to the TTL
-	if app.config.CheckInterval.Seconds() < float64(app.config.TTL) {
-		app.config.CheckInterval = time.Duration(app.config.TTL) * time.Second
-		fmt.Printf("Using the TTL as the check interval: %s\n", app.config.CheckInterval)
+	// Ensure the check interval is greater or equal to the minimum TTL
+	var minTTL time.Duration
+	for _, d := range app.config.Domains {
+		if minTTL == 0 || d.TTL < minTTL {
+			minTTL = d.TTL
+		}
+	}
+	if app.config.CheckInterval < minTTL {
+		app.config.CheckInterval = minTTL
+		fmt.Printf("Using the minimum TTL as the check interval: %s\n", app.config.CheckInterval)
 	}
 
 	app.client, err = ovh.NewClient(
@@ -87,50 +106,49 @@ func (a *app) run() error {
 
 	fmt.Println("Starting daemon mode")
 
-	a.tryUpdateDomainIfNeeded(ctx)
+	a.tryUpdateDomainsIfNeeded(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			a.tryUpdateDomainIfNeeded(ctx)
+			a.tryUpdateDomainsIfNeeded(ctx)
 		}
 	}
 }
 
-func (a *app) tryUpdateDomainIfNeeded(ctx context.Context) {
-	err := a.updateDomainIfNeeded(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to update domain: %s\n", err)
-	}
-}
-
-func (a *app) updateDomainIfNeeded(ctx context.Context) error {
+func (a *app) tryUpdateDomainsIfNeeded(ctx context.Context) {
 	ip, err := a.ipProvider.Get(ctx, a.config.Provider)
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "failed to get IP: %s\n", err)
+		return
 	}
 
 	if !ip.IsValid() {
-		return fmt.Errorf("got invalid IP from provider")
+		fmt.Fprintf(os.Stderr, "got invalid IP from provider\n")
+		return
 	}
 
-	host := a.config.SubDomain + "." + a.config.Domain
+	for _, d := range a.config.Domains {
+		if err := a.updateDomainIfNeeded(ctx, d, ip); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: failed to update domain: %s\n", d.hostname(), err)
+		}
+	}
+}
 
-	dnsIP, err := a.dnsProvider.Lookup(ctx, host)
+func (a *app) updateDomainIfNeeded(ctx context.Context, d domain, ip netip.Addr) error {
+	dnsIP, err := a.dnsProvider.Lookup(ctx, d.hostname())
 	if err != nil {
 		return err
 	}
 
 	if ip == dnsIP {
-		// All good
 		return nil
 	}
 
-	fmt.Printf("Local IP: %s\n", ip)
-	fmt.Printf("DNS IP:   %s\n", dnsIP)
+	fmt.Printf("%s: local IP: %s, DNS IP: %s\n", d.hostname(), ip, dnsIP)
 
-	_, err = a.updateZoneRecord(ip)
+	_, err = a.updateZoneRecord(d, ip)
 	return err
 }

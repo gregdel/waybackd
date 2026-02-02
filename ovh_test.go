@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"testing"
+	"time"
 )
 
 type mockOVHClient struct {
@@ -48,13 +49,13 @@ func jsonInto(src, dst any) {
 	json.Unmarshal(b, dst)
 }
 
+func testDomain() domain {
+	return domain{Domain: "example.com", SubDomain: "home", TTL: 300 * time.Second}
+}
+
 func testApp(client *mockOVHClient) *app {
 	return &app{
-		config: config{
-			Domain:    "example.com",
-			SubDomain: "home",
-			TTL:       300,
-		},
+		config: config{Domains: []domain{testDomain()}},
 		client: client,
 	}
 }
@@ -93,7 +94,7 @@ func TestFetchZoneRecordID(t *testing.T) {
 			}
 
 			a := testApp(mock)
-			id, err := a.fetchZoneRecordID()
+			id, err := a.fetchZoneRecordID(testDomain())
 
 			if tc.wantErr {
 				if err == nil {
@@ -126,7 +127,7 @@ func TestUpdateZoneRecord(t *testing.T) {
 		}
 
 		a := testApp(mock)
-		record, err := a.updateZoneRecord(ip)
+		record, err := a.updateZoneRecord(testDomain(), ip)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -165,7 +166,7 @@ func TestUpdateZoneRecord(t *testing.T) {
 		}
 
 		a := testApp(mock)
-		record, err := a.updateZoneRecord(ip)
+		record, err := a.updateZoneRecord(testDomain(), ip)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -199,7 +200,7 @@ func TestUpdateZoneRecord(t *testing.T) {
 		}
 
 		a := testApp(mock)
-		record, err := a.updateZoneRecord(ip)
+		record, err := a.updateZoneRecord(testDomain(), ip)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -223,7 +224,7 @@ func TestUpdateZoneRecord(t *testing.T) {
 		}
 
 		a := testApp(mock)
-		_, err := a.updateZoneRecord(ip)
+		_, err := a.updateZoneRecord(testDomain(), ip)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
