@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 )
 
@@ -53,7 +54,7 @@ func (a *app) fetchZoneRecordID() (int, error) {
 	}
 }
 
-func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
+func (a *app) updateZoneRecord(ip netip.Addr) (*zoneRecord, error) {
 	baseURL := "/domain/zone/" + a.config.Domain + "/record"
 
 	id, err := a.fetchZoneRecordID()
@@ -64,7 +65,7 @@ func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
 	var record *zoneRecord
 	if id == 0 {
 		fmt.Println("Creating a new zone record...")
-		record = a.newZoneRecord(ip)
+		record = a.newZoneRecord(ip.String())
 		if err := a.client.Post(baseURL, record, record); err != nil {
 			return nil, fmt.Errorf("failed to create the zone record: %w", err)
 		}
@@ -76,7 +77,7 @@ func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
 			return nil, fmt.Errorf("failed to get the zone record: %w", err)
 		}
 
-		if record.Target == ip {
+		if record.Target == ip.String() {
 			fmt.Println("DNS target is already good")
 			return record, nil
 		}
@@ -84,7 +85,7 @@ func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
 		fmt.Printf("IP %s does not match the current DNS target %s, updating...\n",
 			ip, record.Target)
 
-		record = a.newZoneRecord(ip)
+		record = a.newZoneRecord(ip.String())
 		if err := a.client.Put(url, record, nil); err != nil {
 			return nil, fmt.Errorf("failed to update the zone record: %w", err)
 		}

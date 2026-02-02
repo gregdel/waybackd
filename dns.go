@@ -5,40 +5,52 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 )
 
-func (a *app) newResolver() *net.Resolver {
-	resolver := &net.Resolver{PreferGo: true}
-	resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, "udp", a.config.DNSProvider+":53")
-	}
-
-	return resolver
+type DNSProvider interface {
+	Lookup(ctx context.Context, provider string) (netip.Addr, error)
 }
 
-func (a *app) dnsLookup(ctx context.Context) (string, error) {
-	addrs, err := a.resolver.LookupHost(ctx, a.config.SubDomain+"."+a.config.Domain)
+type dnsProvider struct {
+	resolver *net.Resolver
+}
+
+func newDNSProvider(provider string) *dnsProvider {
+	dns := &dnsProvider{
+		resolver: &net.Resolver{PreferGo: true},
+	}
+	dns.resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "udp", provider)
+	}
+
+	return dns
+}
+
+func (dns *dnsProvider) Lookup(ctx context.Context, host string) (netip.Addr, error) {
+	var addr netip.Addr
+	addrs, err := dns.resolver.LookupHost(ctx, host)
 	if err != nil {
 		var dnsError *net.DNSError
 		if !errors.As(err, &dnsError) {
-			return "", err
+			return addr, err
 		}
 
 		if dnsError.IsTimeout {
-			return "", fmt.Errorf("dns timeout: %w", err)
+			return addr, fmt.Errorf("dns timeout: %w", err)
 		}
 
 		if dnsError.IsNotFound {
-			return "", nil
+			return addr, nil
 		}
 
-		return "", err
+		return addr, err
 	}
 
 	if len(addrs) != 1 {
-		return "", fmt.Errorf("expected 1 dns address found: %v", addrs)
+		return addr, fmt.Errorf("expected 1 dns address found: %v", addrs)
 	}
 
-	return addrs[0], nil
+	return netip.ParseAddr(addrs[0])
 }
