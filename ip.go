@@ -50,5 +50,9 @@ func (p *ipProvider) Get(ctx context.Context, provider string) (netip.Addr, erro
 		return addr, err
 	}
 
+	if !addr.IsValid() {
+		return addr, fmt.Errorf("invalid IP from provider")
+	}
+
 	return addr, nil
 }
