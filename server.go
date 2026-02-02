@@ -17,7 +17,7 @@ func (a *app) serverMode(ctx context.Context) error {
 		<-ctx.Done()
 		fmt.Println("Server is shutting down...")
 		if err := server.Shutdown(context.Background()); err != nil {
-			fmt.Printf("failed to shudown server: %s\n", err)
+			fmt.Printf("failed to shutdown server: %s\n", err)
 		}
 	}()
 

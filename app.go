@@ -41,7 +41,7 @@ const (
 )
 
 type app struct {
-	config     *config
+	config     config
 	client     *ovh.Client
 	resolver   *net.Resolver
 	httpClient *http.Client
@@ -54,7 +54,7 @@ func newApp() (*app, error) {
 
 	flag.StringVar(&configPath, "config", "config.yaml", "config file path")
 	flag.BoolVar(&clean, "clean", false, "cleanup dns records and exit")
-	flag.BoolVar(&daemon, "daemon", false, "run in deamon mode")
+	flag.BoolVar(&daemon, "daemon", false, "run in daemon mode")
 	flag.BoolVar(&server, "server", false, "run server mode")
 	flag.Parse()
 
@@ -62,12 +62,11 @@ func newApp() (*app, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
-	app := &app{
-		config: &config{},
-	}
+	app := &app{}
 
-	if err := yaml.NewDecoder(file).Decode(app.config); err != nil {
+	if err := yaml.NewDecoder(file).Decode(&app.config); err != nil {
 		return nil, fmt.Errorf("Failed to decode config file: %w", err)
 	}
 
