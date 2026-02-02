@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/netip"
 	"os"
@@ -45,32 +44,38 @@ type app struct {
 	ipProvider  IPProvider
 }
 
-func newApp() (*app, error) {
-	var configPath string
-	flag.StringVar(&configPath, "config", "config.yaml", "config file path")
-	flag.Parse()
-
-	file, err := os.Open(configPath)
+func parseConfig(path string) (config, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return config{}, err
 	}
 	defer file.Close()
 
-	app := &app{}
-	if err := yaml.NewDecoder(file).Decode(&app.config); err != nil {
-		return nil, fmt.Errorf("Failed to decode config file: %w", err)
+	var cfg config
+	if err := yaml.NewDecoder(file).Decode(&cfg); err != nil {
+		return config{}, fmt.Errorf("Failed to decode config file: %w", err)
 	}
 
-	if len(app.config.Domains) == 0 {
-		return nil, fmt.Errorf("no domains configured")
+	if len(cfg.Domains) == 0 {
+		return config{}, fmt.Errorf("no domains configured")
 	}
 
-	app.dnsProvider = newDNSProvider(app.config.DNSProvider + ":53")
+	return cfg, nil
+}
+
+func newApp(configPath string) (*app, error) {
+	cfg, err := parseConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	app := &app{config: cfg}
+	app.dnsProvider = newDNSProvider(cfg.DNSProvider + ":53")
 	app.ipProvider = newIpProvider()
 
 	// Ensure the check interval is greater or equal to the minimum TTL
 	var minTTL time.Duration
-	for _, d := range app.config.Domains {
+	for _, d := range cfg.Domains {
 		if minTTL == 0 || d.TTL < minTTL {
 			minTTL = d.TTL
 		}
@@ -81,13 +86,47 @@ func newApp() (*app, error) {
 	}
 
 	app.client, err = ovh.NewClient(
-		app.config.OVH.Endpoint, app.config.OVH.ApplicationKey,
-		app.config.OVH.ApplicationSecret, app.config.OVH.ConsumerKey)
+		cfg.OVH.Endpoint, cfg.OVH.ApplicationKey,
+		cfg.OVH.ApplicationSecret, cfg.OVH.ConsumerKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return app, nil
+}
+
+func runSetup(configPath string) error {
+	cfg, err := parseConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	client, err := ovh.NewClient(
+		cfg.OVH.Endpoint, cfg.OVH.ApplicationKey,
+		cfg.OVH.ApplicationSecret, "")
+	if err != nil {
+		return err
+	}
+
+	ckReq := client.NewCkRequest()
+	for _, d := range cfg.Domains {
+		zone := "/domain/zone/" + d.Domain
+		ckReq.AddRule("GET", zone+"/record")
+		ckReq.AddRule("POST", zone+"/record")
+		ckReq.AddRule("POST", zone+"/refresh")
+		ckReq.AddRule("GET", zone+"/record/*")
+		ckReq.AddRule("PUT", zone+"/record/*")
+		ckReq.AddRule("DELETE", zone+"/record/*")
+	}
+
+	state, err := ckReq.Do()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Consumer key: %s\n", state.ConsumerKey)
+	fmt.Printf("Validation URL: %s\n", state.ValidationURL)
+	return nil
 }
 
 func (a *app) run() error {
