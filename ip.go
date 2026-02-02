@@ -6,31 +6,49 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 )
 
-func (a *app) currentIP(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", a.config.Provider, nil)
+type IPProvider interface {
+	Get(ctx context.Context, provider string) (netip.Addr, error)
+}
+
+type ipProvider struct {
+	client *http.Client
+}
+
+func newIpProvider() *ipProvider {
+	return &ipProvider{client: http.DefaultClient}
+}
+
+func (p *ipProvider) Get(ctx context.Context, provider string) (netip.Addr, error) {
+	var addr netip.Addr
+	req, err := http.NewRequestWithContext(ctx, "GET", provider, nil)
 	if err != nil {
-		return "", err
+		return addr, err
 	}
 
-	resp, err := a.httpClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", err
+		return addr, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response from server: %s", resp.Status)
+		return addr, fmt.Errorf("invalid response from server: %s", resp.Status)
 	}
 
 	bodyReader := io.LimitReader(resp.Body, 64)
 
 	body, err := io.ReadAll(bodyReader)
 	if err != nil {
-		return "", err
+		return addr, err
 	}
 	body = bytes.TrimRight(body, "\n")
 
-	return string(body), nil
+	if err := addr.UnmarshalText(body); err != nil {
+		return addr, err
+	}
+
+	return addr, nil
 }

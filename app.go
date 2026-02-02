@@ -4,8 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,10 +29,10 @@ type config struct {
 }
 
 type app struct {
-	config     config
-	client     *ovh.Client
-	resolver   *net.Resolver
-	httpClient *http.Client
+	config      config
+	client      *ovh.Client
+	dnsProvider DNSProvider
+	ipProvider  IPProvider
 }
 
 func newApp() (*app, error) {
@@ -53,8 +51,8 @@ func newApp() (*app, error) {
 		return nil, fmt.Errorf("Failed to decode config file: %w", err)
 	}
 
-	app.resolver = app.newResolver()
-	app.httpClient = http.DefaultClient
+	app.dnsProvider = newDNSProvider(app.config.DNSProvider + ":53")
+	app.ipProvider = newIpProvider()
 
 	// Ensure the check interval is greater or equal to the TTL
 	if app.config.CheckInterval.Seconds() < float64(app.config.TTL) {
@@ -108,12 +106,14 @@ func (a *app) tryUpdateDomainIfNeeded(ctx context.Context) {
 }
 
 func (a *app) updateDomainIfNeeded(ctx context.Context) error {
-	ip, err := a.currentIP(ctx)
+	ip, err := a.ipProvider.Get(ctx, a.config.Provider)
 	if err != nil {
 		return err
 	}
 
-	dnsIP, err := a.dnsLookup(ctx)
+	host := a.config.SubDomain + "." + a.config.Domain
+
+	dnsIP, err := a.dnsProvider.Lookup(ctx, host)
 	if err != nil {
 		return err
 	}
@@ -121,10 +121,6 @@ func (a *app) updateDomainIfNeeded(ctx context.Context) error {
 	if ip == dnsIP {
 		// All good
 		return nil
-	}
-
-	if dnsIP == "" {
-		dnsIP = "not configured"
 	}
 
 	fmt.Printf("Local IP: %s\n", ip)
