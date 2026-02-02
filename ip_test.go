@@ -50,7 +50,7 @@ func TestIPProviderGet(t *testing.T) {
 			name:       "empty body",
 			body:       "",
 			statusCode: http.StatusOK,
-			wantAddr:   netip.Addr{},
+			wantErr:    true,
 		},
 	}
 

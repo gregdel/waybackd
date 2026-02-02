@@ -111,6 +111,10 @@ func (a *app) updateDomainIfNeeded(ctx context.Context) error {
 		return err
 	}
 
+	if !ip.IsValid() {
+		return fmt.Errorf("got invalid IP from provider")
+	}
+
 	host := a.config.SubDomain + "." + a.config.Domain
 
 	dnsIP, err := a.dnsProvider.Lookup(ctx, host)
