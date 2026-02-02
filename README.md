@@ -5,14 +5,8 @@ waybackd, find your way back !
 ```sh
 # ./waybackd -h
 Usage of ./waybackd:
-  -clean
-    cleanup dns records and exit
   -config string
     config file path (default "config.yaml")
-  -daemon
-    run in deamon mode
-  -server
-    run server mode
 ```
 
 ## OVH API
