@@ -6,6 +6,12 @@ import (
 	"net/url"
 )
 
+type OVHClient interface {
+	Get(url string, resType any) error
+	Post(url string, reqBody, resType any) error
+	Put(url string, reqBody, resType any) error
+}
+
 type zoneRecord struct {
 	FieldType string `json:"fieldType"`
 	Subdomain string `json:"subDomain"`
