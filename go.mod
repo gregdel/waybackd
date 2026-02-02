@@ -1,6 +1,6 @@
 module github.com/gregdel/waybackd
 
-go 1.18
+go 1.25
 
 require (
 	github.com/ovh/go-ovh v1.4.3

@@ -22,7 +22,6 @@ type config struct {
 	TTL           uint          `yaml:"ttl"`
 	DNSProvider   string        `yaml:"dns_provider"`
 	CheckInterval time.Duration `yaml:"check_interval"`
-	ServerAddress string        `yaml:"server_address"`
 	OVH           struct {
 		ApplicationKey    string `yaml:"application_key"`
 		ApplicationSecret string `yaml:"application_secret"`
@@ -31,31 +30,16 @@ type config struct {
 	} `yaml:"ovh"`
 }
 
-type appMode int
-
-const (
-	appModeUnconfigured appMode = iota
-	appModeServer
-	appModeDaemon
-	appModeClean
-)
-
 type app struct {
 	config     config
 	client     *ovh.Client
 	resolver   *net.Resolver
 	httpClient *http.Client
-	mode       appMode
 }
 
 func newApp() (*app, error) {
 	var configPath string
-	var clean, daemon, server bool
-
 	flag.StringVar(&configPath, "config", "config.yaml", "config file path")
-	flag.BoolVar(&clean, "clean", false, "cleanup dns records and exit")
-	flag.BoolVar(&daemon, "daemon", false, "run in daemon mode")
-	flag.BoolVar(&server, "server", false, "run server mode")
 	flag.Parse()
 
 	file, err := os.Open(configPath)
@@ -65,42 +49,24 @@ func newApp() (*app, error) {
 	defer file.Close()
 
 	app := &app{}
-
 	if err := yaml.NewDecoder(file).Decode(&app.config); err != nil {
 		return nil, fmt.Errorf("Failed to decode config file: %w", err)
 	}
 
-	if server {
-		if app.config.ServerAddress == "" {
-			return nil, fmt.Errorf("Missing server address")
-		}
-	} else {
-		app.resolver = app.newResolver()
-		app.httpClient = http.DefaultClient
+	app.resolver = app.newResolver()
+	app.httpClient = http.DefaultClient
 
-		// Ensure the check interval is greater or equal to the TTL
-		if app.config.CheckInterval.Seconds() < float64(app.config.TTL) {
-			app.config.CheckInterval = time.Duration(app.config.TTL) * time.Second
-			fmt.Printf("Using the TTL as the check interval: %s\n", app.config.CheckInterval)
-		}
-
-		app.client, err = ovh.NewClient(
-			app.config.OVH.Endpoint, app.config.OVH.ApplicationKey,
-			app.config.OVH.ApplicationSecret, app.config.OVH.ConsumerKey)
-		if err != nil {
-			return nil, err
-		}
+	// Ensure the check interval is greater or equal to the TTL
+	if app.config.CheckInterval.Seconds() < float64(app.config.TTL) {
+		app.config.CheckInterval = time.Duration(app.config.TTL) * time.Second
+		fmt.Printf("Using the TTL as the check interval: %s\n", app.config.CheckInterval)
 	}
 
-	switch {
-	case daemon:
-		app.mode = appModeDaemon
-	case server:
-		app.mode = appModeServer
-	case clean:
-		app.mode = appModeClean
-	default:
-		return app, fmt.Errorf("Please select a mode")
+	app.client, err = ovh.NewClient(
+		app.config.OVH.Endpoint, app.config.OVH.ApplicationKey,
+		app.config.OVH.ApplicationSecret, app.config.OVH.ConsumerKey)
+	if err != nil {
+		return nil, err
 	}
 
 	return app, nil
@@ -117,23 +83,10 @@ func (a *app) run() error {
 		cancel()
 	}()
 
-	switch a.mode {
-	case appModeDaemon:
-		return a.daemonMode(ctx)
-	case appModeServer:
-		return a.serverMode(ctx)
-	case appModeClean:
-		return a.cleanMode()
-	default:
-		return fmt.Errorf("Invalid app mode")
-	}
-}
-
-func (a *app) daemonMode(ctx context.Context) error {
 	ticker := time.NewTicker(a.config.CheckInterval)
 	defer ticker.Stop()
 
-	fmt.Println("Starting deamon mode")
+	fmt.Println("Starting daemon mode")
 
 	a.tryUpdateDomainIfNeeded(ctx)
 
@@ -179,8 +132,4 @@ func (a *app) updateDomainIfNeeded(ctx context.Context) error {
 
 	_, err = a.updateZoneRecord(ip)
 	return err
-}
-
-func (a *app) cleanMode() error {
-	return a.deleteZoneRecord()
 }

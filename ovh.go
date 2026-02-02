@@ -21,22 +21,6 @@ func (a *app) newZoneRecord(ip string) *zoneRecord {
 	}
 }
 
-func (a *app) deleteZoneRecord() error {
-	id, err := a.fetchZoneRecordID()
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Deleting the zone record...")
-
-	url := fmt.Sprintf("/domain/zone/%s/record/%d", a.config.Domain, id)
-	if err := a.client.Delete(url, nil); err != nil {
-		return fmt.Errorf("failed to delete the zone record: %w", err)
-	}
-
-	return a.refreshZoneRecord()
-}
-
 func (a *app) refreshZoneRecord() error {
 	url := "/domain/zone/" + a.config.Domain + "/refresh"
 	if err := a.client.Post(url, nil, nil); err != nil {
@@ -77,7 +61,7 @@ func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
 		return nil, err
 	}
 
-	record := &zoneRecord{}
+	var record *zoneRecord
 	if id == 0 {
 		fmt.Println("Creating a new zone record...")
 		record = a.newZoneRecord(ip)
@@ -85,6 +69,8 @@ func (a *app) updateZoneRecord(ip string) (*zoneRecord, error) {
 			return nil, fmt.Errorf("failed to create the zone record: %w", err)
 		}
 	} else {
+		record = &zoneRecord{}
+
 		url := fmt.Sprintf("%s/%d", baseURL, id)
 		if err := a.client.Get(url, record); err != nil {
 			return nil, fmt.Errorf("failed to get the zone record: %w", err)
