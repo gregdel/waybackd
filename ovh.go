@@ -19,31 +19,31 @@ type zoneRecord struct {
 	Target    string `json:"target"`
 }
 
-func (a *app) newZoneRecord(ip string) *zoneRecord {
+func newZoneRecord(d domain, ip string) *zoneRecord {
 	return &zoneRecord{
-		Subdomain: a.config.SubDomain,
-		TTL:       a.config.TTL,
+		Subdomain: d.SubDomain,
+		TTL:       uint(d.TTL.Seconds()),
 		FieldType: "A",
 		Target:    ip,
 	}
 }
 
-func (a *app) refreshZoneRecord() error {
-	url := "/domain/zone/" + a.config.Domain + "/refresh"
+func (a *app) refreshZoneRecord(d domain) error {
+	url := "/domain/zone/" + d.Domain + "/refresh"
 	if err := a.client.Post(url, nil, nil); err != nil {
 		return fmt.Errorf("failed to refresh the zone: %w", err)
 	}
 
-	fmt.Println("DNS zone refreshed")
+	fmt.Printf("%s: DNS zone refreshed\n", d.hostname())
 	return nil
 }
 
-func (a *app) fetchZoneRecordID() (int, error) {
-	baseURL := "/domain/zone/" + a.config.Domain
+func (a *app) fetchZoneRecordID(d domain) (int, error) {
+	baseURL := "/domain/zone/" + d.Domain
 
 	v := url.Values{}
 	v.Add("fieldType", "A")
-	v.Add("subDomain", a.config.SubDomain)
+	v.Add("subDomain", d.SubDomain)
 	url := fmt.Sprintf("%s/record?%s", baseURL, v.Encode())
 	recordIDs := []int{}
 	if err := a.client.Get(url, &recordIDs); err != nil {
@@ -60,18 +60,18 @@ func (a *app) fetchZoneRecordID() (int, error) {
 	}
 }
 
-func (a *app) updateZoneRecord(ip netip.Addr) (*zoneRecord, error) {
-	baseURL := "/domain/zone/" + a.config.Domain + "/record"
+func (a *app) updateZoneRecord(d domain, ip netip.Addr) (*zoneRecord, error) {
+	baseURL := "/domain/zone/" + d.Domain + "/record"
 
-	id, err := a.fetchZoneRecordID()
+	id, err := a.fetchZoneRecordID(d)
 	if err != nil {
 		return nil, err
 	}
 
 	var record *zoneRecord
 	if id == 0 {
-		fmt.Println("Creating a new zone record...")
-		record = a.newZoneRecord(ip.String())
+		fmt.Printf("%s: creating a new zone record...\n", d.hostname())
+		record = newZoneRecord(d, ip.String())
 		if err := a.client.Post(baseURL, record, record); err != nil {
 			return nil, fmt.Errorf("failed to create the zone record: %w", err)
 		}
@@ -84,19 +84,19 @@ func (a *app) updateZoneRecord(ip netip.Addr) (*zoneRecord, error) {
 		}
 
 		if record.Target == ip.String() {
-			fmt.Println("DNS target is already good")
+			fmt.Printf("%s: DNS target is already good\n", d.hostname())
 			return record, nil
 		}
 
-		fmt.Printf("IP %s does not match the current DNS target %s, updating...\n",
-			ip, record.Target)
+		fmt.Printf("%s: IP %s does not match the current DNS target %s, updating...\n",
+			d.hostname(), ip, record.Target)
 
-		record = a.newZoneRecord(ip.String())
+		record = newZoneRecord(d, ip.String())
 		if err := a.client.Put(url, record, nil); err != nil {
 			return nil, fmt.Errorf("failed to update the zone record: %w", err)
 		}
 	}
 
-	err = a.refreshZoneRecord()
+	err = a.refreshZoneRecord(d)
 	return record, err
 }
